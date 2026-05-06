@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   kafka:
-    image: apache/kafka:3.9.0
+    image: docker.io/apache/kafka:3.9.0
     container_name: compat-kafka
     ports:
       - "9092:9092"
@@ -19,14 +19,14 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
       interval: 10s
       timeout: 5s
       retries: 30
       start_period: 15s
 
   confluent-sr:
-    image: confluentinc/cp-schema-registry:7.8.0
+    image: docker.io/confluentinc/cp-schema-registry:7.8.0
     container_name: compat-confluent-sr
     depends_on:
       kafka:
@@ -60,7 +60,7 @@ services:
       APICURIO_REST_DELETION_ARTIFACT_ENABLED: "true"
       APICURIO_REST_DELETION_ARTIFACTVERSION_ENABLED: "true"
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/q/health/live || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/apis/ccompat/v7/subjects || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 30
