@@ -98,51 +98,28 @@ Source code at: `app/src/main/java/io/apicurio/registry/ccompat/rest/`
 | API Testing | REST Assured |
 | Containers | podman + podman-compose |
 | Static Analysis | openapi-diff |
-| Reporting | Qute (Quarkus templating) or custom HTML |
-| CI | GitHub Actions |
+| Reporting | Custom HTML via `StringBuilder` (standalone, no framework) |
+| CI | GitHub Actions (podman-based) |
 
-## Confluent Schema Registry API v8
+## Confluent Schema Registry API v8 Reference
 
 **Note**: "v8" refers to the Confluent Platform 7.x series (CP 7.x = Schema Registry API v8).
 
-### Complete Endpoint Map
+### Endpoint Groups
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/subjects` | List all subjects |
-| GET | `/subjects/{subject}/versions` | List versions under a subject |
-| GET | `/subjects/{subject}/versions/{version}` | Get schema by version |
-| GET | `/subjects/{subject}/versions/{version}/schema` | Get raw schema string |
-| POST | `/subjects/{subject}/versions` | Register schema under subject |
-| POST | `/subjects/{subject}/versions/{version}` | Look up schema version |
-| DELETE | `/subjects/{subject}/versions/{version}` | Delete version (soft) |
-| DELETE | `/subjects/{subject}/versions/{version}?permanent=true` | Delete version (permanent) |
-| DELETE | `/subjects/{subject}` | Delete subject entirely |
-| GET | `/subjects/{subject}/versions/{version}/referencedby` | Find referents |
-| GET | `/schemas/ids/{id}` | Get schema by global ID |
-| GET | `/schemas/ids/{id}/versions` | Get all versions for a schema ID |
-| GET | `/schemas/ids/{id}/subjects` | Get all subjects referencing a schema ID |
-| POST | `/compatibility/subjects/{subject}/versions/{version}` | Test compatibility |
-| GET | `/config` | Get global compatibility config |
-| PUT | `/config` | Set global compatibility config |
-| GET | `/config/{subject}` | Get compatibility config for subject |
-| PUT | `/config/{subject}` | Set compatibility config for subject |
-| GET | `/mode` | Get registry mode |
-| PUT | `/mode` | Set registry mode |
+| Group | Endpoints | Test Class |
+|-------|-----------|------------|
+| Subjects | `/subjects`, `/subjects/{subject}/versions/*`, `/subjects/{subject}` | `SubjectsEndpointTest` |
+| Schemas | `/schemas/ids/{id}/*` | `SchemasEndpointTest` |
+| Compatibility | `/compatibility/subjects/{subject}/versions/{version}` | `CompatibilityEndpointTest` |
+| Config | `/config`, `/config/{subject}` | `ConfigEndpointTest` |
+| Mode | `/mode` | `ModeEndpointTest` |
 
-### Confluent Error Codes
+Full endpoint map and error codes are in `PRD.md`.
 
-| Code | Name | HTTP | Meaning |
-|------|------|------|---------|
-| `40401` | SUBJECT_NOT_FOUND | 404 | Subject does not exist |
-| `40402` | VERSION_NOT_FOUND | 404 | Version does not exist under subject |
-| `40403` | SCHEMA_NOT_FOUND | 404 | Schema with given global ID not found |
-| `40901` | INCOMPATIBLE_SCHEMA | 409 | Schema incompatible with previous versions |
-| `42201` | INVALID_SCHEMA | 422 | Schema is invalid/malformed |
-| `42202` | INVALID_VERSION | 422 | Invalid version identifier |
-| `42203` | INVALID_COMPATIBILITY | 422 | Invalid compatibility level |
-| `50001` | INTERNAL_SERVER_ERROR | 500 | Unexpected internal error |
-| `50003` | KAFKA_ERROR | 500 | Error communicating with Kafka |
+### Error Code Format
+
+Confluent returns JSON with `error_code` (int) and `message` (string). Key codes: 40401 (subject not found), 40402 (version not found), 40901 (incompatible), 42201-42203 (validation errors), 50001/50003 (server errors).
 
 ### Mode Values
 
@@ -168,23 +145,23 @@ NONE, BACKWARD, BACKWARD_TRANSITIVE, FORWARD, FORWARD_TRANSITIVE, FULL, FULL_TRA
 
 ## Architecture
 
-### Module Structure (Target)
+### Module Structure
 
 ```
 apicurio-compatibility-harness/
   pom.xml                          # Root POM, aligned with Apicurio conventions
   podman-compose.yml               # Confluent + Apicurio + Kafka containers
+  wait-for-ready.sh                # Health check script (usage: ./wait-for-ready.sh 180)
   src/
     main/
       java/io/apicurio/registry/compatibility/
-        config/                    # Test configuration, base URLs
-        model/                     # Shared DTOs, error codes, test result models
-        staticanalysis/            # OpenAPI diff, example validation
-        report/                    # HTML report generation
+        config/                    # Test configuration, base URLs (TestConfig)
+        model/                     # CompatibilityTestResult enum, TestOutcome DTO (16 fields)
+        collector/                 # TestResultCollector (thread-safe, CopyOnWriteArrayList)
+        report/                    # HtmlReportGenerator (standalone HTML), ReportContextEnricher
     test/
       java/io/apicurio/registry/compatibility/
-        fixtures/                  # Avro schema test data, example payloads
-        shared/                    # REST Assured clients, response validators
+        shared/                    # AbstractCompatibilityTest, SchemaFixtures, CompatibilityReportExtension
         subjects/                  # /subjects endpoint tests
         schemas/                   # /schemas endpoint tests
         compatibility/             # /compatibility endpoint tests
@@ -231,21 +208,49 @@ Each test sends the **same request** to both:
 
 Then compares status codes, response bodies, and error codes.
 
+## Key Patterns & Gotchas
+
+### assertStatus=false for Known Incompatibilities
+
+Tests use `assertCompatibility(testName, method, endpoint, confluent, apicurio, false)` to record status code differences as `FAIL` outcomes without throwing assertion errors. This lets CI pass while still surfacing all behavioral differences in the report. When `assertStatus=false`, the `assertEquals` on status codes is skipped but the outcome is still recorded.
+
+### Report Enrichment Pipeline
+
+At JVM shutdown (via `CompatibilityReportExtension`), `ReportContextEnricher` enriches each `TestOutcome` with:
+- `testClassName`/`testMethodName` (inferred from stack trace)
+- `testSourceCode` (method body extracted from source file via regex + brace counting)
+- `openApiOperation`/`confluentDocUrl`/`apicurioImplHint` (static endpoint-to-context mapping)
+
+### Report UI Features
+
+The standalone HTML report includes a slide-out Detail Drawer with 5 tabs (Responses, Test Code, API Spec, Docs, Impl), localStorage-based triage state (status/severity/notes per test), and inline Java syntax highlighting.
+
+### Apicurio URL Prefix
+
+Apicurio's Confluent-compatible API is at `/apis/ccompat/v8` (note the `/apis/` prefix). Confluent's is at the root. This is handled by `TestConfig`.
+
+### Known Apicurio Incompatibilities (as of CP 7.8.0)
+
+- Invalid schema syntax not validated in compatibility checks (200 vs 422)
+- Invalid compatibility level returns 500 instead of 422
+- Invalid mode returns 400 instead of 422
+- POST version lookup returns 405 (endpoint not fully supported)
+- referencedBy on nonexistent subject returns 200 (empty list) instead of 404
+- Schema registration may not include `version` field in response
+
 ## CI/CD (GitHub Actions)
 
-Workflow: `.github/workflows/compatibility-tests.yml`
-- Runs on push/PR
-- Installs podman + podman-compose
-- Bootstraps containers, waits for health checks
-- Runs `mvn clean test`
+### Compatibility Tests (`.github/workflows/compatibility-tests.yml`)
+- Runs on push/PR to main
+- Starts podman containers, waits for health checks via `wait-for-ready.sh`
+- Runs `mvn clean test -Dconfluent.registry.version=VERSION` (version extracted from `podman-compose.yml`)
 - Uploads `target/compatibility-report.html` as artifact
+- On push to main: publishes summary as comment on pinned GitHub Issue #1 ("Compatibility Test Report Dashboard")
 
-## Current Status
-
-- [ ] Project initialized with PRD
-- [ ] Research phase (in progress - agents gathering Apicurio conventions)
-- [ ] Backlog tasks to be created
-- [ ] Implementation pending
+### Confluent Version Scout (`.github/workflows/confluent-version-scout.yml`)
+- Weekly cron (Monday 03:17 UTC) + manual trigger
+- Checks Docker Hub for newer `cp-schema-registry` tags
+- Opens a GitHub Issue if a newer version is found (dedup check prevents duplicates)
 
 ## Commands
 
@@ -253,11 +258,21 @@ Workflow: `.github/workflows/compatibility-tests.yml`
 # Start test infrastructure
 podman-compose up -d
 
+# Wait for both registries to be healthy (timeout in seconds)
+./wait-for-ready.sh 180
+
 # Run all tests and generate report
 mvn clean test
 
+# Run with explicit Confluent version (used by CI)
+CONFLUENT_VERSION=$(grep -oP 'cp-schema-registry:\K[0-9]+\.[0-9]+\.[0-9]+' podman-compose.yml)
+mvn clean test -Dconfluent.registry.version="$CONFLUENT_VERSION"
+
 # Run specific test class
-mvn test -Dtest=SubjectsResourceTest
+mvn test -Dtest=SubjectsEndpointTest
+
+# View the generated report
+xdg-open target/compatibility-report.html
 
 # Tear down infrastructure
 podman-compose down
