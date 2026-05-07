@@ -116,7 +116,11 @@ public class HtmlReportGenerator {
         sb.append("                box-shadow: 0 1px 3px rgba(0,0,0,0.1); }\n");
         sb.append("        th { background: #37474f; color: white; text-align: left;\n");
         sb.append("             padding: 0.75rem 1rem; font-size: 0.85rem; text-transform: uppercase;\n");
-        sb.append("             position: sticky; top: 0; z-index: 1; }\n");
+        sb.append("             position: sticky; top: 0; z-index: 1; cursor: pointer;\n");
+        sb.append("             user-select: none; }\n");
+        sb.append("        th:hover { background: #455a64; }\n");
+        sb.append("        th .sort-arrow { font-size: 0.7rem; margin-left: 0.3rem; opacity: 0.4; }\n");
+        sb.append("        th.sorted-asc .sort-arrow, th.sorted-desc .sort-arrow { opacity: 1; }\n");
         sb.append("        td { padding: 0.6rem 1rem; border-bottom: 1px solid #eee; font-size: 0.9rem; }\n");
         sb.append("        tr.main-row { cursor: pointer; transition: background 0.15s; }\n");
         sb.append("        tr.main-row:hover { background: #e3f2fd; }\n");
@@ -311,8 +315,13 @@ public class HtmlReportGenerator {
         sb.append("    <table id=\"results-table\">\n");
         sb.append("        <thead><tr>")
                 .append("<th style=\"width:24px\"></th>")  // triage dot
-                .append("<th>Test</th><th>Method</th><th>Endpoint</th>")
-                .append("<th>Confluent</th><th>Apicurio</th><th>Result</th><th>Details</th>")
+                .append("<th onclick=\"sortTable(1)\">Test <span class=\"sort-arrow\">▲</span></th>")
+                .append("<th onclick=\"sortTable(2)\">Method <span class=\"sort-arrow\">▲</span></th>")
+                .append("<th onclick=\"sortTable(3)\">Endpoint <span class=\"sort-arrow\">▲</span></th>")
+                .append("<th onclick=\"sortTable(4)\">Confluent <span class=\"sort-arrow\">▲</span></th>")
+                .append("<th onclick=\"sortTable(5)\">Apicurio <span class=\"sort-arrow\">▲</span></th>")
+                .append("<th onclick=\"sortTable(6)\">Result <span class=\"sort-arrow\">▲</span></th>")
+                .append("<th onclick=\"sortTable(7)\">Details <span class=\"sort-arrow\">▲</span></th>")
                 .append("</tr></thead>\n");
         sb.append("        <tbody>\n");
 
@@ -715,6 +724,24 @@ public class HtmlReportGenerator {
         sb.append("            }\n");
         sb.append("        }\n");
         sb.append("    })();\n");
+
+        // Table sorting
+        sb.append("    var sortCol = -1, sortAsc = true;\n");
+        sb.append("    function sortTable(col) {\n");
+        sb.append("        if (sortCol === col) { sortAsc = !sortAsc; } else { sortCol = col; sortAsc = true; }\n");
+        sb.append("        var table = document.getElementById('results-table');\n");
+        sb.append("        var rows = Array.from(table.querySelectorAll('tbody tr'));\n");
+        sb.append("        rows.sort(function(a, b) {\n");
+        sb.append("            var va = a.cells[col].textContent.trim();\n");
+        sb.append("            var vb = b.cells[col].textContent.trim();\n");
+        sb.append("            var cmp = va < vb ? -1 : va > vb ? 1 : 0;\n");
+        sb.append("            return sortAsc ? cmp : -cmp;\n");
+        sb.append("        });\n");
+        sb.append("        rows.forEach(function(r) { table.querySelector('tbody').appendChild(r); });\n");
+        sb.append("        var ths = table.querySelectorAll('thead th');\n");
+        sb.append("        ths.forEach(function(th) { th.className = ''; });\n");
+        sb.append("        if (col >= 0 && ths[col]) ths[col].className = sortAsc ? 'sorted-asc' : 'sorted-desc';\n");
+        sb.append("    }\n");
 
         sb.append("    </script>\n");
     }
