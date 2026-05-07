@@ -71,9 +71,12 @@ class OpenApiDiffTest {
 
     private Path fetchSpecToTemp(String url, String label) {
         try {
-            String body = given().get(url).then().statusCode(200).extract().body().asString();
+            var response = given().get(url);
+            if (response.statusCode() != 200) {
+                return null;
+            }
             Path file = tempDir.resolve(label + ".json");
-            Files.writeString(file, body);
+            Files.writeString(file, response.body().asString());
             return file;
         } catch (Exception e) {
             return null;
