@@ -84,13 +84,13 @@ jobs:
         run: |
           REPORT="report-output/compatibility-report.html"
 
-          # Extract counts from summary cards
-          TOTAL=$(grep -oP 'Total.*?<div class="number[^"]*">\K[0-9]+' "$REPORT" | head -1 || echo "?")
-          PASS=$(grep -oP 'Pass.*?<div class="number pass[^"]*">\K[0-9]+' "$REPORT" | head -1 || echo "?")
-          FAIL=$(grep -oP 'Fail.*?<div class="number fail[^"]*">\K[0-9]+' "$REPORT" | head -1 || echo "?")
-          SKIP=$(grep -oP 'Skipped.*?<div class="number skipped[^"]*">\K[0-9]+' "$REPORT" | head -1 || echo "?")
-          KNOWN=$(grep -oP 'Known Incompat\..*?<div class="number known[^"]*">\K[0-9]+' "$REPORT" | head -1 || echo "?")
-          ERR=$(grep -oP 'Error.*?<div class="number error[^"]*">\K[0-9]+' "$REPORT" | head -1 || echo "?")
+          # Extract counts from summary cards (HTML structure: <div class="number CLASS">N</div><div class="label">LABEL</div>)
+          TOTAL=$(grep -oP '<div class="number">[0-9]+</div><div class="label">Total' "$REPORT" | grep -oP '>[0-9]+<' | tr -d '><' | head -1 || echo "?")
+          PASS=$(grep -oP '<div class="number pass">[0-9]+</div><div class="label">Pass' "$REPORT" | grep -oP '>[0-9]+<' | tr -d '><' | head -1 || echo "?")
+          FAIL=$(grep -oP '<div class="number fail">[0-9]+</div><div class="label">Fail' "$REPORT" | grep -oP '>[0-9]+<' | tr -d '><' | head -1 || echo "?")
+          SKIP=$(grep -oP '<div class="number skipped">[0-9]+</div><div class="label">Skipped' "$REPORT" | grep -oP '>[0-9]+<' | tr -d '><' | head -1 || echo "?")
+          KNOWN=$(grep -oP '<div class="number known">[0-9]+</div><div class="label">Known Incompat' "$REPORT" | grep -oP '>[0-9]+<' | tr -d '><' | head -1 || echo "?")
+          ERR=$(grep -oP '<div class="number error">[0-9]+</div><div class="label">Error' "$REPORT" | grep -oP '>[0-9]+<' | tr -d '><' | head -1 || echo "?")
           VERSION=$(grep -oP 'Confluent Schema Registry: v\K[0-9.]+' "$REPORT" | head -1 || echo "unknown")
 
           echo "total=$TOTAL" >> "$GITHUB_OUTPUT"
@@ -116,10 +116,10 @@ jobs:
           ISSUE_NUMBER=$(gh issue list --state open --search "Compatibility Test Report Dashboard" --json number --jq '.[0].number' || true)
 
           if [ -z "$ISSUE_NUMBER" ]; then
-            ISSUE_NUMBER=$(gh issue create \
+            ISSUE_URL=$(gh issue create \
               --title "Compatibility Test Report Dashboard" \
-              --body "Latest compatibility test results are posted as comments below. The full HTML report is available as a [workflow artifact](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})." \
-              --json number | jq -r '.number')
+              --body "Latest compatibility test results are posted as comments below. The full HTML report is available as a [workflow artifact](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).")
+            ISSUE_NUMBER=$(basename "$ISSUE_URL")
           fi
 
           echo "number=$ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
