@@ -63,8 +63,40 @@ jobs:
         if: always()
         run: podman-compose down -v || true
 
-  publish-report:
+  deploy-pages:
     needs: compatibility
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download compatibility report
+        uses: actions/download-artifact@v4
+        with:
+          name: compatibility-report
+          path: report-output
+
+      - name: Rename to index.html
+        run: mv report-output/compatibility-report.html report-output/index.html
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: report-output
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  publish-report:
+    needs: [compatibility, deploy-pages]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     permissions:
@@ -160,7 +192,7 @@ jobs:
           | Known Incompatibilities | ${KNOWN} |
           | Errors | ${ERR} |
 
-          **Full HTML report:** [Download artifact](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) (compatibility-report)
+          **Full HTML report:** [View in browser](https://apicurio.github.io/apicurio-compatibility-harness/) | [Download artifact](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) (compatibility-report)
 
           ---
           BODY
