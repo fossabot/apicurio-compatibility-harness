@@ -70,6 +70,8 @@ jobs:
     permissions:
       issues: write
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download compatibility report
         uses: actions/download-artifact@v4
         with:
@@ -116,7 +118,7 @@ jobs:
             ISSUE_NUMBER=$(gh issue create \
               --title "Compatibility Test Report Dashboard" \
               --body "Latest compatibility test results are posted as comments below. The full HTML report is available as a [workflow artifact](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})." \
-              --jq '.number')
+              --json number | jq -r '.number')
           fi
 
           echo "number=$ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
