@@ -93,7 +93,8 @@ jobs:
     if: >-
       github.event_name == 'push' && github.ref == 'refs/heads/main' &&
       always() &&
-      needs.compatibility.result == 'success'
+      needs.compatibility.result != 'cancelled' &&
+      needs.compatibility.result != 'skipped'
     runs-on: ubuntu-24.04
     permissions:
       pages: write
@@ -172,7 +173,8 @@ jobs:
     if: >-
       github.event_name == 'push' && github.ref == 'refs/heads/main' &&
       always() &&
-      needs.compatibility.result == 'success'
+      needs.compatibility.result != 'cancelled' &&
+      needs.compatibility.result != 'skipped'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
