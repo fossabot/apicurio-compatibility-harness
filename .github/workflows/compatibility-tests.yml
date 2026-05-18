@@ -23,15 +23,25 @@ on:
 
 jobs:
   compatibility:
-    if: github.event.inputs.api_level == '' || github.event.inputs.api_level == matrix.api_level
     runs-on: ubuntu-24.04
     strategy:
       matrix:
         api_level: [v7, v8]
     steps:
+      - name: Check API level filter
+        id: filter
+        run: |
+          INPUT="${{ github.event.inputs.api_level }}"
+          if [ -n "$INPUT" ] && [ "$INPUT" != "${{ matrix.api_level }}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Skipping ${{ matrix.api_level }} (requested: $INPUT)"
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.filter.outputs.skip != 'true'
 
       - name: Set up JDK 17
+        if: steps.filter.outputs.skip != 'true'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -39,9 +49,11 @@ jobs:
           cache: maven
 
       - name: Install podman-compose
+        if: steps.filter.outputs.skip != 'true'
         run: pip3 install podman-compose==1.2.0
 
       - name: Start test infrastructure
+        if: steps.filter.outputs.skip != 'true'
         env:
           CONFLUENT_IMAGE: ${{ github.event.inputs.confluent_image || '' }}
         run: |
@@ -60,10 +72,12 @@ jobs:
         timeout-minutes: 10
 
       - name: Wait for registries
+        if: steps.filter.outputs.skip != 'true'
         run: ./wait-for-ready.sh 180
         timeout-minutes: 5
 
       - name: Run compatibility tests (${{ matrix.api_level }})
+        if: steps.filter.outputs.skip != 'true'
         run: |
           CONFLUENT_VERSION=$(grep -oP 'cp-schema-registry:\K[0-9]+\.[0-9]+\.[0-9]+' podman-compose.yml)
           APICURIO_IMAGE=$(podman inspect compat-apicurio-sr --format '{{.Image}}' 2>/dev/null || echo "unknown")
@@ -73,11 +87,11 @@ jobs:
         timeout-minutes: 15
 
       - name: Collect container logs
-        if: always()
+        if: always() && steps.filter.outputs.skip != 'true'
         run: podman-compose logs || true
 
       - name: Upload compatibility report
-        if: always()
+        if: always() && steps.filter.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: compatibility-report-${{ matrix.api_level }}
@@ -85,7 +99,7 @@ jobs:
           retention-days: 30
 
       - name: Tear down infrastructure
-        if: always()
+        if: always() && steps.filter.outputs.skip != 'true'
         run: podman-compose down -v || true
 
   deploy-pages:
