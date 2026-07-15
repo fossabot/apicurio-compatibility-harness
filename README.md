@@ -1,4 +1,6 @@
 # Apicurio Registry - Confluent v8 API Compatibility Harness
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FApicurio%2Fapicurio-compatibility-harness.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2FApicurio%2Fapicurio-compatibility-harness?ref=badge_shield)
+
 
 Automated test harness that compares [Apicurio Registry](https://github.com/Apicurio/apicurio-registry)'s Confluent-compatible API against the official [Confluent Schema Registry](https://docs.confluent.io/platform/current/schema-registry/) API v8 (CP 7.x).
 
@@ -171,3 +173,6 @@ The following behavioral differences between Confluent and Apicurio are tracked 
 ## License
 
 This project follows the Apicurio Registry contribution guidelines: DCO sign-off required, squash-and-merge PRs.
+
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FApicurio%2Fapicurio-compatibility-harness.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2FApicurio%2Fapicurio-compatibility-harness?ref=badge_large)
